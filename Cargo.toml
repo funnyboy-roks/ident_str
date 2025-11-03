@@ -1,0 +1,13 @@
+[package]
+name = "ident-str"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+macro-string = "0.1.4"
+proc-macro2 = { version = "1.0.101", features = ["span-locations"] }
+quote = "1.0.40"
+syn = "2.0.100"
