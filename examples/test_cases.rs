@@ -1,4 +1,4 @@
-// cargo test --example simple
+// cargo test --example test_cases
 
 use std::ops::Add;
 
@@ -32,6 +32,6 @@ test_add!(3 + 4 == 7);
 test_add!(4 + 5 == 9);
 
 fn main() {
-    eprintln!("Use `cargo test --example simple` to run this example.");
+    eprintln!("Use `cargo test --example test_cases` to run this example.");
     std::process::exit(1);
 }

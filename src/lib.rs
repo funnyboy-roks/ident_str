@@ -1,3 +1,32 @@
+//! A macro to convert string literals into identifiers.  This is primarily
+//! used for creating unique identifiers in macros.
+//!
+//! # Example
+//!
+//! ```
+//! macro_rules! my_macro {
+//!     ($name: ident) => {
+//!         ident_str::ident_str! {
+//!             name_a = concat!(stringify!($name), "_a"),
+//!             name_b = concat!(stringify!($name), "_b")
+//!             => {
+//!                 fn name_a() {}
+//!                 fn name_b() {}
+//!             }
+//!         }
+//!     };
+//! }
+//!
+//! my_macro!(foo);
+//! ```
+//!
+//! expands to
+//!
+//! ```
+//! fn foo_a() {}
+//! fn foo_b() {}
+//! ```
+
 use std::collections::HashMap;
 
 use macro_string::MacroString;
@@ -91,6 +120,41 @@ fn translate_stream(
         .collect()
 }
 
+/// The main macro.
+///
+/// Accepts any number of `name = <string literal>` pairs (or using macros like `concat!` or
+/// `stringify!`), followed by `=>` and then the body that will be expanded (optionally surrounded
+/// by `{}`).
+///
+/// ```
+/// ident_str::ident_str! {
+///     name = "hello_world" =>
+///     fn name() -> &'static str {
+///         stringify!(name)
+///     }
+/// }
+///
+/// # fn main() {
+/// #     assert_eq!(hello_world(), "hello_world");
+/// # }
+/// ```
+///
+/// If you wish to use an identifier that you assigned in the assignments, you can use a raw
+/// identifier: `r#<name>`:
+///
+/// ```
+/// # struct MyStruct { name: &'static str }
+/// ident_str::ident_str! {
+///     name = "my_function" =>
+///     fn name(s: MyStruct) -> &'static str {
+///         s.r#name
+///     }
+/// }
+///
+/// # fn main() {
+/// #     assert_eq!(my_function(MyStruct { name: "hello world" }), "hello world");
+/// # }
+/// ```
 #[proc_macro]
 pub fn ident_str(input: TokenStream) -> TokenStream {
     let decls = parse_macro_input!(input as Decls);
