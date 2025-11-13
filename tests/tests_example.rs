@@ -30,8 +30,3 @@ test_add!(4 + 2 == 6);
 test_add!(2 + 3 == 5);
 test_add!(3 + 4 == 7);
 test_add!(4 + 5 == 9);
-
-fn main() {
-    eprintln!("Use `cargo test --example test_cases` to run this example.");
-    std::process::exit(1);
-}
