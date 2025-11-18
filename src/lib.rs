@@ -10,7 +10,7 @@
 //!     ($name: ident) => {
 //!         ident_str::ident_str! {
 //!             #name_a = concat!(stringify!($name), "_a"),
-//!             #name_b = concat!(stringify!($name), "_b")
+//!             #name_b = concat!(stringify!($name), "_b"),
 //!             => {
 //!                 fn #name_a() {}
 //!                 fn #name_b() {}
@@ -70,7 +70,6 @@ use syn::{
     Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
-    punctuated::Punctuated,
 };
 
 enum Value {
@@ -140,16 +139,33 @@ impl Parse for Decl {
 }
 
 struct Decls {
-    decls: Punctuated<Decl, Token![,]>,
-    _arrow: Token![=>],
+    decls: Vec<Decl>,
     body: TokenStream2,
 }
 
 impl Parse for Decls {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         Ok(Self {
-            decls: Punctuated::parse_separated_nonempty(input)?,
-            _arrow: input.parse()?,
+            decls: {
+                let mut decls = Vec::new();
+                loop {
+                    decls.push(input.parse()?);
+                    let lookahead = input.lookahead1();
+                    if lookahead.peek(Token![,]) {
+                        let _: Token![,] = input.parse()?;
+                        if input.peek(Token![=>]) {
+                            let _: Token![=>] = input.parse()?;
+                            break;
+                        }
+                    } else if lookahead.peek(Token![=>]) {
+                        let _: Token![=>] = input.parse()?;
+                        break;
+                    } else {
+                        Err(lookahead.error())?
+                    }
+                }
+                decls
+            },
             // TODO: emit warning when stream does not use a variable (proc_macro::Diagnostic to be
             // stabilised)
             body: {
@@ -235,8 +251,8 @@ fn translate_stream(
 /// The main macro.
 ///
 /// Accepts any number of `name = <string literal>` pairs (or using macros like `concat!` or
-/// `stringify!`), followed by `=>` and then the body that will be expanded (optionally surrounded
-/// by `{}`).
+/// `stringify!`) separated by commas (with an optional trailing comma), followed by `=>` and then
+/// the body that will be expanded (optionally surrounded by `{}`).
 ///
 /// ```
 /// ident_str::ident_str! {
@@ -250,7 +266,6 @@ fn translate_stream(
 /// #     assert_eq!(hello_world(), "hello_world");
 /// # }
 /// ```
-///
 #[proc_macro]
 pub fn ident_str(input: TokenStream) -> TokenStream {
     let decls = parse_macro_input!(input as Decls);
