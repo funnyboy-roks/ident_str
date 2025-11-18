@@ -90,10 +90,12 @@ impl Parse for Value {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         if input
             .step(|x| {
-                if let Some((ident, cursor)) = x.ident()
-                    && ident == "None"
-                {
-                    Ok((ident, cursor))
+                if let Some((ident, cursor)) = x.ident() {
+                    if ident == "None" {
+                        Ok((ident, cursor))
+                    } else {
+                        Err(x.error("Expected string or None"))
+                    }
                 } else {
                     Err(x.error("Expected string or None"))
                 }
@@ -285,17 +287,17 @@ pub fn ident_str(input: TokenStream) -> TokenStream {
             );
         }
 
-        if let Some(valstring) = d.value.to_string()
-            && syn::parse_str::<Ident>(&valstring).is_err()
-        {
-            append_error(
-                &mut errors,
-                syn::Error::new_spanned(
-                    d.name_to_tokens(),
-                    format!("Invalid identifier: {:?}", valstring),
-                ),
-            );
-            can_continue = false;
+        if let Some(valstring) = d.value.to_string() {
+            if syn::parse_str::<Ident>(&valstring).is_err() {
+                append_error(
+                    &mut errors,
+                    syn::Error::new_spanned(
+                        d.name_to_tokens(),
+                        format!("Invalid identifier: {:?}", valstring),
+                    ),
+                );
+                can_continue = false;
+            }
         }
         map.insert(strident, d);
     }
