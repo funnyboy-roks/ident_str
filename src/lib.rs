@@ -54,7 +54,7 @@
 //! }
 //! ```
 //!
-//! This exapands into
+//! This expands into
 //!
 //! ```ignore
 //! #ignore
