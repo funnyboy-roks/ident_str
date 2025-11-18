@@ -9,6 +9,10 @@ categories = ["rust-patterns", "development-tools"]
 keywords = ["proc-macro"]
 rust-version = "1.85"
 
+
+ [lints.rust]
+ unexpected_cfgs = { level = "allow", check-cfg = ['cfg(rustc_nightly)'] }
+
 [lib]
 path = "src/lib.rs"
 proc-macro = true
@@ -21,3 +25,6 @@ syn = "2.0.110"
 
 [dev-dependencies]
 trybuild = { version = "1.0.114", features = ["diff"] }
+
+[build-dependencies]
+rustc_version = "0.4.1"

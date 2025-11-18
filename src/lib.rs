@@ -1,3 +1,4 @@
+#![cfg_attr(rustc_nightly, feature(proc_macro_diagnostic))]
 //! A macro to convert string literals into identifiers.  The primary use-case is to allow
 //! declarative macros to produce identifiers that are unique to each call.  The alternative is to
 //! accept each identifier as an argument to the macro call, which gets unweildy with many
@@ -65,12 +66,17 @@ use std::collections::HashMap;
 use macro_string::MacroString;
 use proc_macro::TokenStream;
 use proc_macro2::{Group, Ident, TokenStream as TokenStream2, TokenTree};
-use quote::{ToTokens, TokenStreamExt};
+use quote::TokenStreamExt;
 use syn::{
     Token,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
+
+#[cfg(rustc_nightly)]
+use proc_macro::{Diagnostic, Level, MultiSpan};
+#[cfg(not(rustc_nightly))]
+use quote::ToTokens;
 
 enum Value {
     MacroString(MacroString),
@@ -117,11 +123,18 @@ struct Decl {
 }
 
 impl Decl {
+    #[cfg(not(rustc_nightly))]
     fn name_to_tokens(&self) -> TokenStream2 {
         let mut tokens = TokenStream2::new();
         self._hash.to_tokens(&mut tokens);
         self.ident.to_tokens(&mut tokens);
         tokens
+    }
+
+    #[cfg(rustc_nightly)]
+    fn name_span(&self) -> impl MultiSpan {
+        use syn::spanned::Spanned;
+        vec![self._hash.span().unwrap(), self.ident.span().unwrap()]
     }
 }
 
@@ -182,6 +195,7 @@ impl Parse for Decls {
     }
 }
 
+#[cfg(not(rustc_nightly))]
 fn append_error(errors: &mut Option<syn::Error>, new: syn::Error) {
     if let Some(errors) = errors {
         errors.combine(new);
@@ -223,21 +237,29 @@ fn translate_stream(
                         };
                         out.append(TokenTree::Ident(ident));
                     } else {
-                        let mut tokens = TokenStream2::new();
-                        tokens.append(tok);
-                        tokens.append(ident);
-                        append_error(
-                            errors,
-                            // TODO: Replace this with Diagnostic to get better error message
-                            syn::Error::new_spanned(
-                                tokens,
-                                format!(
-                                    "Unknown ident variable.  If you intended to literally use '#{0}', add `#{0} = None` to the declarations",
-                                    strident
+                        #[cfg(rustc_nightly)]
+                        {
+                            Diagnostic::spanned(&[tok.span().unwrap(), ident.span().unwrap()][..], Level::Error, "Unknown ident variable")
+                                .help(format!("If you intended to literally use '#{0}', add `#{0} = None` to the declarations", strident))
+                                .emit();
+                        }
+                        #[cfg(not(rustc_nightly))]
+                        {
+                            let mut tokens = TokenStream2::new();
+                            tokens.append(tok);
+                            tokens.append(ident);
+                            append_error(
+                                errors,
+                                syn::Error::new_spanned(
+                                    tokens,
+                                    format!(
+                                        "Unknown ident variable.  If you intended to literally use '#{0}', add `#{0} = None` to the declarations",
+                                        strident
+                                    ),
                                 ),
-                            ),
-                        );
-                        continue;
+                            );
+                        }
+                        return TokenStream2::new();
                     }
                 } else {
                     out.append(tok);
@@ -246,7 +268,6 @@ fn translate_stream(
             TokenTree::Punct(_) | TokenTree::Literal(_) => out.append(tok),
         }
     }
-
     out
 }
 
@@ -277,7 +298,17 @@ pub fn ident_str(input: TokenStream) -> TokenStream {
     for d in decls.decls.into_iter() {
         let strident = d.ident.to_string();
         let existing = map.get(&strident);
-        if existing.is_some() {
+        #[cfg_attr(not(rustc_nightly), allow(unused))]
+        if let Some(existing) = existing {
+            #[cfg(rustc_nightly)]
+            Diagnostic::spanned(
+                d.name_span(),
+                Level::Error,
+                format!("Redefinition of #{}", d.ident),
+            )
+            .span_help(existing.name_span(), "Previous definition here")
+            .emit();
+            #[cfg(not(rustc_nightly))]
             append_error(
                 &mut errors,
                 syn::Error::new_spanned(
@@ -289,6 +320,14 @@ pub fn ident_str(input: TokenStream) -> TokenStream {
 
         if let Some(valstring) = d.value.to_string() {
             if syn::parse_str::<Ident>(&valstring).is_err() {
+                #[cfg(rustc_nightly)]
+                Diagnostic::spanned(
+                    d.name_span(),
+                    Level::Error,
+                    format!("Invalid identifier: {:?}", valstring),
+                )
+                .emit();
+                #[cfg(not(rustc_nightly))]
                 append_error(
                     &mut errors,
                     syn::Error::new_spanned(
@@ -302,13 +341,15 @@ pub fn ident_str(input: TokenStream) -> TokenStream {
         map.insert(strident, d);
     }
 
+    #[allow(unused_mut)]
     let mut tokens = if can_continue {
         translate_stream(decls.body, &map, &mut errors)
     } else {
-        debug_assert!(errors.is_some());
+        // debug_assert!(errors.is_some());
         TokenStream2::new()
     };
 
+    #[cfg(not(rustc_nightly))]
     if let Some(errors) = errors {
         errors.to_compile_error().to_tokens(&mut tokens);
     }
